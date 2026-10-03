@@ -1,26 +1,31 @@
 import { useRef, useState } from 'react';
 import { ELEMENT_SPECS } from '../../domain';
-import type { LayoutMode, PathPreview, RenderElement } from '../../types';
+import type { BoundsIssue, ChannelIssue, IssueStatusValue, LayoutMode, OverlapIssue, PathPreview, RenderElement, SpacingIssue } from '../../types';
 
 interface FieldCanvasProps {
   field: { width: number; height: number };
   elements: RenderElement[];
   selectedId: string | null;
   mode: LayoutMode;
-  overlaps: Array<{ firstId: string; secondId: string }>;
-  bounds: Array<{ elementId: string }>;
-  channels: Array<{ firstId: string; secondId: string }>;
+  overlaps: OverlapIssue[];
+  bounds: BoundsIssue[];
+  channels: ChannelIssue[];
+  spacing: SpacingIssue[];
+  issueStatuses: Record<string, IssueStatusValue>;
   path: PathPreview | null;
   onSelect: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
 }
 
-export function FieldCanvas({ field, elements, selectedId, mode, overlaps, bounds, channels, path, onSelect, onMove }: FieldCanvasProps) {
+export function FieldCanvas({ field, elements, selectedId, mode, overlaps, bounds, channels, spacing, issueStatuses, path, onSelect, onMove }: FieldCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
-  const issueIds = new Set(overlaps.flatMap((item) => [item.firstId, item.secondId]));
-  const channelIds = new Set(channels.flatMap((item) => [item.firstId, item.secondId]));
-  const boundsIds = new Set(bounds.map((item) => item.elementId));
+  // 已忽略的问题不参与高亮；已确认的保留提示
+  const pendingIssues = [...overlaps, ...channels, ...spacing].filter((issue) => issueStatuses[issue.key] !== 'ignored');
+  const pendingBounds = bounds.filter((issue) => issueStatuses[issue.key] !== 'ignored');
+  const issueIds = new Set(pendingIssues.flatMap((item) => [item.firstId, item.secondId]));
+  const channelIds = new Set([...channels, ...spacing].filter((issue) => issueStatuses[issue.key] !== 'ignored').flatMap((item) => [item.firstId, item.secondId]));
+  const boundsIds = new Set(pendingBounds.map((item) => item.elementId));
   const canvasWidth = 100 / Math.max(1, field.width / (field.height * 1.35));
 
   const pointFromEvent = (event: React.PointerEvent) => {
