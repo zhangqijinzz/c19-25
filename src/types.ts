@@ -24,11 +24,24 @@ export interface FieldSize {
   height: number;
 }
 
+export type CheckCategory = 'overlap' | 'bounds' | 'channel' | 'setback' | 'spacing';
+
+export interface RuleSet {
+  checks: Record<CheckCategory, boolean>;
+  minChannel: number;
+  boundarySetback: number;
+  minSpacing: number;
+}
+
+export type IssueResolution = 'confirmed' | 'ignored';
+
 export interface LayoutDocument {
   version: 1;
   title: string;
   field: FieldSize;
   elements: ExpoElement[];
+  rules?: RuleSet;
+  resolutions?: Record<string, IssueResolution>;
 }
 
 export interface ElementSpec {
@@ -58,6 +71,17 @@ export interface ChannelIssue {
   gap: number;
 }
 
+export interface SetbackIssue {
+  elementId: string;
+  clearance: number;
+}
+
+export interface SpacingIssue {
+  firstId: string;
+  secondId: string;
+  gap: number;
+}
+
 export interface PathPreview {
   points: Array<{ x: number; y: number }>;
   distance: number;
@@ -69,6 +93,8 @@ export interface Analysis {
   overlaps: OverlapIssue[];
   bounds: BoundsIssue[];
   channels: ChannelIssue[];
+  setbacks: SetbackIssue[];
+  spacings: SpacingIssue[];
   path: PathPreview | null;
 }
 

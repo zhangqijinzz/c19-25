@@ -1,4 +1,4 @@
-import { createStarterDocument } from './domain';
+import { createStarterDocument, normalizeResolutions, normalizeRuleSet } from './domain';
 import type { DocumentStorageService } from './storageService';
 import type { ExpoElement, LayoutDocument } from './types';
 
@@ -20,13 +20,19 @@ const isDocument = (value: unknown): value is LayoutDocument => {
   return document.version === 1 && typeof document.title === 'string' && !!field && typeof field.width === 'number' && typeof field.height === 'number' && Array.isArray(document.elements) && document.elements.every(isElement);
 };
 
+const normalizeDocument = (document: LayoutDocument): LayoutDocument => ({
+  ...document,
+  rules: normalizeRuleSet(document.rules),
+  resolutions: normalizeResolutions(document.resolutions),
+});
+
 export class LocalLayoutRepository implements LayoutRepository {
   constructor(private readonly storage: DocumentStorageService) {}
 
   async load(): Promise<LayoutDocument> {
     try {
       const saved = await this.storage.read();
-      return isDocument(saved) ? saved : createStarterDocument();
+      return isDocument(saved) ? normalizeDocument(saved) : createStarterDocument();
     } catch {
       return createStarterDocument();
     }

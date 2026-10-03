@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createStarterDocument } from '../src/domain';
+import { createStarterDocument, issueKey } from '../src/domain';
 import type { LayoutRepository } from '../src/repository';
 import type { LayoutDocument } from '../src/types';
 import { ExpoSketchViewModel } from '../src/viewModel';
@@ -50,5 +50,59 @@ describe('ExpoSketchViewModel', () => {
     const before = vm.state.document.elements[0].width;
     vm.resizeSelected(0, 0);
     expect(vm.state.document.elements[0].width).toBe(before);
+  });
+
+  it('confirms and ignores issues without dropping them from the full analysis', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.overlaps[0];
+    const key = issueKey('overlap', issue.firstId, issue.secondId);
+    vm.confirmIssue(key);
+    expect(vm.state.openAnalysis.overlaps).toHaveLength(0);
+    expect(vm.state.analysis.overlaps.length).toBeGreaterThan(0);
+    vm.restoreIssue(key);
+    expect(vm.state.openAnalysis.overlaps.length).toBeGreaterThan(0);
+    vm.ignoreIssue(key);
+    expect(vm.state.openAnalysis.overlaps).toHaveLength(0);
+  });
+
+  it('recomputes conclusions and clears resolutions when thresholds change', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.overlaps[0];
+    vm.confirmIssue(issueKey('overlap', issue.firstId, issue.secondId));
+    expect(vm.state.openAnalysis.overlaps).toHaveLength(0);
+    vm.updateRuleThreshold('minChannel', 2);
+    expect(vm.state.document.resolutions).toEqual({});
+    expect(vm.state.document.rules?.minChannel).toBe(2);
+    expect(vm.state.openAnalysis.overlaps.length).toBeGreaterThan(0);
+  });
+
+  it('clears resolutions when a check category is toggled', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.overlaps[0];
+    vm.ignoreIssue(issueKey('overlap', issue.firstId, issue.secondId));
+    vm.toggleCheck('overlap');
+    expect(vm.state.analysis.overlaps).toEqual([]);
+    expect(vm.state.document.resolutions).toEqual({});
+    vm.toggleCheck('overlap');
+    expect(vm.state.analysis.overlaps.length).toBeGreaterThan(0);
+  });
+
+  it('rejects invalid threshold values', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.updateRuleThreshold('minChannel', -1);
+    vm.updateRuleThreshold('minChannel', Number.NaN);
+    expect(vm.state.document.rules?.minChannel).toBe(1.2);
+  });
+
+  it('restores default rules and recomputes conclusions', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.updateRuleThreshold('minChannel', 3);
+    vm.toggleCheck('setback');
+    vm.resetRules();
+    expect(vm.state.document.rules?.minChannel).toBe(1.2);
+    expect(vm.state.document.rules?.checks.setback).toBe(false);
   });
 });

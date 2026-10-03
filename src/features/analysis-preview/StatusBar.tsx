@@ -1,9 +1,10 @@
+import { countIssues } from '../../domain';
 import type { Analysis, LayoutMode, Notice } from '../../types';
 
 interface StatusBarProps { mode: LayoutMode; analysis: Analysis; notice: Notice; elementCount: number; lastSavedAt: number | null; onModeChange: (mode: LayoutMode) => void; }
 
 export function StatusBar({ mode, analysis, notice, elementCount, lastSavedAt, onModeChange }: StatusBarProps) {
-  const issues = analysis.overlaps.length + analysis.bounds.length + analysis.channels.length;
+  const issues = countIssues(analysis);
   return <div className="bottom-bar">
     <div className="status-message"><span className={`status-dot ${notice.tone}`} />{notice.message}<small>{lastSavedAt ? `· 已保存 ${new Date(lastSavedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : ''}</small></div>
     <div className="bottom-meta"><span>{elementCount} 个元素</span><span className={issues ? 'has-issues' : 'is-clear'}>{issues ? `${issues} 项待检查` : '布局状态良好'}</span><span>自动保存</span></div>

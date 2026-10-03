@@ -1,6 +1,8 @@
-import { createElement, createStarterDocument, analyzeLayout, findElement, getBoundingBox, normalizeRotation } from './domain';
+import { analyzeLayout, createDefaultRuleSet, createElement, createStarterDocument, filterOpenIssues, findElement, getBoundingBox, getRuleSet, normalizeRotation, normalizeRuleSet } from './domain';
 import type { LayoutRepository } from './repository';
-import type { Analysis, ElementKind, LayoutDocument, LayoutMode, Notice, RenderElement, ViewPhase } from './types';
+import type { Analysis, CheckCategory, ElementKind, IssueResolution, LayoutDocument, LayoutMode, Notice, RenderElement, RuleSet, ViewPhase } from './types';
+
+export type RuleThresholdKey = 'minChannel' | 'boundarySetback' | 'minSpacing';
 
 export interface ExpoSketchState {
   phase: ViewPhase;
@@ -10,6 +12,7 @@ export interface ExpoSketchState {
   selectedElement: RenderElement | null;
   mode: LayoutMode;
   analysis: Analysis;
+  openAnalysis: Analysis;
   notice: Notice;
   lastSavedAt: number | null;
 }
@@ -21,6 +24,7 @@ const toRenderElements = (document: LayoutDocument): RenderElement[] => document
 
 const starter = createStarterDocument();
 const starterRenderElements = toRenderElements(starter);
+const starterAnalysis = analyzeLayout(starter);
 
 type Listener = () => void;
 
@@ -33,7 +37,8 @@ export class ExpoSketchViewModel {
     selectedId: 'stage-1',
     selectedElement: starterRenderElements.find((element) => element.id === 'stage-1') ?? null,
     mode: 'edit',
-    analysis: analyzeLayout(createStarterDocument()),
+    analysis: starterAnalysis,
+    openAnalysis: filterOpenIssues(starterAnalysis, {}),
     notice: { tone: 'info', message: '正在恢复最近布局…' },
     lastSavedAt: null,
   };
@@ -109,6 +114,41 @@ export class ExpoSketchViewModel {
     this.commitAndPersist({ document: { ...this.stateValue.document, title: title.trim() } });
   }
 
+  toggleCheck(category: CheckCategory) {
+    const rules = getRuleSet(this.stateValue.document);
+    this.applyRules({ ...rules, checks: { ...rules.checks, [category]: !rules.checks[category] } });
+  }
+
+  updateRuleThreshold(key: RuleThresholdKey, value: number) {
+    if (!Number.isFinite(value) || value < 0) return;
+    const rules = normalizeRuleSet({ ...getRuleSet(this.stateValue.document), [key]: value });
+    this.applyRules(rules);
+  }
+
+  resetRules() {
+    this.applyRules(createDefaultRuleSet(), '已恢复默认检查标准，检查结论已重新计算');
+  }
+
+  confirmIssue(key: string) { this.resolveIssue(key, 'confirmed'); }
+
+  ignoreIssue(key: string) { this.resolveIssue(key, 'ignored'); }
+
+  restoreIssue(key: string) {
+    const resolutions = { ...this.stateValue.document.resolutions };
+    delete resolutions[key];
+    this.commitAndPersist({ document: { ...this.stateValue.document, resolutions }, notice: { tone: 'info', message: '该结论已恢复为待检查' } });
+  }
+
+  private resolveIssue(key: string, resolution: IssueResolution) {
+    const resolutions = { ...this.stateValue.document.resolutions, [key]: resolution };
+    this.commitAndPersist({ document: { ...this.stateValue.document, resolutions }, notice: { tone: 'info', message: resolution === 'confirmed' ? '已确认该检查结论' : '已忽略该检查结论' } });
+  }
+
+  private applyRules(rules: RuleSet, message = '检查标准已更新，历史结论已按新标准重新计算') {
+    const document = { ...this.stateValue.document, rules, resolutions: {} };
+    this.commitAndPersist({ document, notice: { tone: 'info', message } });
+  }
+
   resetExample() {
     const document = createStarterDocument();
     this.commitAndPersist({ document, selectedId: 'stage-1', mode: 'edit', notice: { tone: 'success', message: '已恢复示例布局' } });
@@ -131,7 +171,8 @@ export class ExpoSketchViewModel {
   private commit(patch: Partial<ExpoSketchState>) {
     const next = { ...this.stateValue, ...patch };
     const renderElements = toRenderElements(next.document);
-    this.stateValue = { ...next, renderElements, selectedElement: renderElements.find((element) => element.id === next.selectedId) ?? null, analysis: analyzeLayout(next.document) };
+    const analysis = analyzeLayout(next.document);
+    this.stateValue = { ...next, renderElements, selectedElement: renderElements.find((element) => element.id === next.selectedId) ?? null, analysis, openAnalysis: filterOpenIssues(analysis, next.document.resolutions ?? {}) };
     this.listeners.forEach((listener) => listener());
   }
 }
